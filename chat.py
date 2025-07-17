@@ -6,21 +6,25 @@ client = openai.OpenAI(
 )
 
 def chat(messages):
-    """
-    调用本地gpt-3.5-turbo模型生成回复
-    参数:
-        messages: 聊天记录列表，格式为[{"role": "user"/"assistant", "content": "..."}, ...]
-    返回:
-        模型生成的回复文本
+    """。
+    Parameters:
+        messages: app.py with the conversation history, a list of dictionaries
+                  with "role" and "content" keys.
+    return:
+        generator， yielding response chunks from the model.
     """
     try:
-        
         response = client.chat.completions.create(
-            model="gpt-3.5-turbo", 
+            model="gpt-3.5-turbo",
             messages=messages,
-            temperature=0.7 
+            temperature=0.7,
+            stream=True
         )
-       
-        return response.choices[0].message.content
+        for chunk in response:
+            # compatible with OpenAI and LocalAI's response structure
+            if hasattr(chunk, 'choices') and chunk.choices:
+                delta = getattr(chunk.choices[0], "delta", None)
+                if delta and hasattr(delta, "content") and delta.content:
+                    yield delta.content
     except Exception as e:
-        return f"调用模型失败: {str(e)}"
+        yield f"Fail to use model: {str(e)}"
