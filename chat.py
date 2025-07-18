@@ -1,8 +1,11 @@
 import openai
 
 client = openai.OpenAI(
-    base_url="http://localhost:8080/v1",  
-    api_key="dummy_key"  
+    # Uncomment the following lines to use DeepSeek API
+    # base_url="https://api.deepseek.com/v1",  
+    # api_key="sk-38eff65a45bd4c4ba49371db2ecaee88"  
+    base_url="http://localhost:8080/v1",
+    api_key="dummy_key"
 )
 
 def chat(messages):
@@ -15,6 +18,8 @@ def chat(messages):
     """
     try:
         response = client.chat.completions.create(
+            # Uncomment the following line to use DeepSeek model
+            # model="deepseek-chat",
             model="gpt-3.5-turbo",
             messages=messages,
             temperature=0.7,

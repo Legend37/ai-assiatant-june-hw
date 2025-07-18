@@ -140,15 +140,16 @@ with gr.Blocks() as demo:
     )
     
    
+    def clear_all():
+        global messages
+        messages = []
+        return []
+
     clear_btn.click(
-        lambda: ( [], [] ),  
-        None, 
-        [chatbot], 
+        clear_all,
+        None,
+        [chatbot],
         queue=False
-    ).then(
-        lambda: setattr(globals(), 'messages', []),  
-        None, 
-        None
     )
 
 if __name__ == "__main__":
