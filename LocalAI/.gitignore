@@ -26,7 +26,7 @@ generated/
 !charts/*
 # prevent above rules from omitting the api/localai folder
 !api/localai
-
+generated/
 # Ignore models
 models/*
 test-models/
