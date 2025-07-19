@@ -2,7 +2,8 @@ import gradio as gr
 import os
 from chat import chat  
 from pdf import read_file_content, generate_answer
-from image_generate import image_generate  
+from image_generate import image_generate
+from mnist import image_classification  # 导入图片分类函数
 
 messages = [] 
 current_file_text = None  
@@ -21,7 +22,7 @@ def write_debug_info(messages, history):
         for i, (user, assistant) in enumerate(history):
             # User content could be either text or file tuple
             if isinstance(user, tuple):
-                user_content = f"[File: {user[0]}]"
+                user_content = f"File: {user[0]}"
             else:
                 user_content = user[:50] + ('...' if len(user) > 50 else '')
             
@@ -51,44 +52,62 @@ def add_file(history, file):
     """Process uploaded file, extract content and update display"""
     global messages, current_file_text
     file_path = file.name
-    current_file_text = read_file_content(file_path)
-    if current_file_text:
-        prompt = f"I uploaded a document, the content is as follows: {current_file_text}"
-        messages.append({"role": "user", "content": prompt})
+    
+    # 检查文件是否为PNG图片
+    if file_path.lower().endswith('.png'):
+
+        filename = os.path.basename(file_path)
+        messages.append({"role": "user", "content": f"Please classify {filename}"})
         history = history + [((file.name,), None)]
-    return history
+        return history
+    else:
+        # 非PNG文件
+        current_file_text = read_file_content(file_path)
+        if current_file_text:
+            prompt = f"I uploaded a document, the content is as follows: {current_file_text}"
+            messages.append({"role": "user", "content": prompt})
+            history = history + [((file.name,), None)]
+        return history
 
 def bot(history):
     """Call the model to generate a reply and update chat history"""
     global messages, current_file_text
-    
-    # 获取最后一条用户消息
-    last_message = messages[-1]["content"]
 
+    last_message = messages[-1]["content"]
+    
+    # 检查是否是分类图片请求（格式为"Please classify {filename}"）
+    if last_message.startswith("Please classify ") and ".png" in last_message:
+        # 从最后一个history条目中获取文件路径
+        if len(history) > 0 and isinstance(history[-1][0], tuple) and len(history[-1][0]) > 0:
+            file_path = history[-1][0][0]  # 获取文件路径
+
+            classification_result = image_classification(file_path)
+            messages.append({"role": "assistant", "content": classification_result})
+            history[-1][1] = classification_result
+            
+            write_debug_info(messages, history)
+            return history
+        
     # 检查是否是图片生成指令
-    if last_message.startswith("/image "):
-        # 提取图片描述内容
+    elif last_message.startswith("/image "):
+
         image_content = last_message[7:]  # 移除"/image "前缀
-        
-        # 调用图片生成函数
+
         image_url = image_generate(image_content)
-        
-        # 更新messages
         messages.append({"role": "assistant", "content": image_url})
 
         # 判断返回的是URL还是错误信息
         if image_url.startswith("图片生成过程中出错"):
-            # 错误信息直接显示文本
             history[-1][1] = image_url
         else:
-            # 正确生成的图片URL以元组形式返回以显示图片
             history[-1][1] = (image_url,)
         
         write_debug_info(messages, history)
 
         return history
+    
+    # 正常的聊天响应以及文件响应
     else:
-        # 正常的聊天响应处理
         response = ""
         new_history = history
         # Stream update history, create a new copy to avoid state issues
