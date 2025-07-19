@@ -4,7 +4,8 @@ from chat import chat
 from pdf import read_file_content, generate_answer
 from image_generate import image_generate
 from mnist import image_classification  # 导入图片分类函数
-
+from search import search
+from fetch import fetch 
 messages = [] 
 current_file_text = None  
 
@@ -105,6 +106,64 @@ def bot(history):
         write_debug_info(messages, history)
 
         return history
+    
+    # 检查是否是网络搜索指令
+    elif last_message.startswith("/search "):
+        search_content = last_message[8:]
+        
+        combined_content = search(search_content)
+        messages[-1]["content"] = combined_content
+        
+        response = ""
+        new_history = history
+        for chunk in chat(messages):
+            if chunk and chunk.strip():
+                response += chunk
+                new_history = history[:-1] + [(history[-1][0], response)]
+                yield new_history
+        
+        if response.strip():
+            messages.append({"role": "assistant", "content": response.strip()})
+        
+        write_debug_info(messages, new_history)
+        return new_history
+    
+    # 检查是否是网页总结指令
+    elif last_message.startswith("/fetch url "):
+        url = last_message[10:].strip()
+        
+        if not url:
+            messages.append({"role": "assistant", "content": "错误：URL不能为空"})
+            history[-1][1] = "错误：URL不能为空"
+            write_debug_info(messages, history)
+            return history
+            
+        # 调用fetch函数获取总结问题
+        question = fetch(url)
+        
+        # 如果fetch返回错误信息，直接显示
+        if question.startswith("错误："):
+            messages.append({"role": "assistant", "content": question})
+            history[-1][1] = question
+            write_debug_info(messages, history)
+            return history
+            
+        # 更新messages
+        messages[-1]["content"] = question
+        
+        response = ""
+        new_history = history
+        for chunk in chat(messages):
+            if chunk and chunk.strip():
+                response += chunk
+                new_history = history[:-1] + [(history[-1][0], response)]
+                yield new_history
+        
+        if response.strip():
+            messages.append({"role": "assistant", "content": response.strip()})
+        
+        write_debug_info(messages, new_history)
+        return new_history
     
     # 正常的聊天响应以及文件响应
     else:
