@@ -87,7 +87,7 @@ def bot(history):
             history[-1][1] = classification_result
             
             write_debug_info(messages, history)
-            return history
+            yield history
         
     # 检查是否是图片生成指令
     elif last_message.startswith("/image "):
@@ -95,17 +95,38 @@ def bot(history):
         image_content = last_message[7:]  # 移除"/image "前缀
 
         image_url = image_generate(image_content)
-        messages.append({"role": "assistant", "content": image_url})
+        messages.append({"role": "assistant", "content": image_url or ""})
+
+        # 将URL转换为本地文件路径，避免SSRF问题
+        def url_to_local_path(url):
+            if not url:
+                return ""
+            # 先移除URL前缀
+            if url.startswith("http://localhost:8080/"):
+                relative_path = url.replace("http://localhost:8080/", "")
+            elif url.startswith("http://127.0.0.1:8080/"):
+                relative_path = url.replace("http://127.0.0.1:8080/", "")
+            else:
+                relative_path = url
+            
+            # 将generated-images路径映射到LocalAI目录
+            relative_path = relative_path.replace("generated-images", "LocalAI/generated/images")
+            return relative_path
 
         # 判断返回的是URL还是错误信息
-        if image_url.startswith("图片生成过程中出错"):
-            history[-1][1] = image_url
+        if not image_url or image_url.startswith("图片生成过程中出错"):
+            history[-1][1] = image_url or "图片生成失败"
         else:
-            history[-1][1] = (image_url,)
+            # 转换为本地路径避免SSRF错误
+            local_path = url_to_local_path(image_url)
+            print(f"DEBUG - 原始URL: {image_url}")
+            print(f"DEBUG - 转换后路径: {local_path}")
+            print(f"DEBUG - 文件是否存在: {os.path.exists(local_path)}")
+            history[-1][1] = (local_path,)
         
         write_debug_info(messages, history)
 
-        return history
+        yield history
     
     # 检查是否是网络搜索指令
     elif last_message.startswith("/search "):
@@ -126,7 +147,6 @@ def bot(history):
             messages.append({"role": "assistant", "content": response.strip()})
         
         write_debug_info(messages, new_history)
-        return new_history
     
     # 检查是否是网页总结指令
     elif last_message.startswith("/fetch url "):
@@ -136,7 +156,8 @@ def bot(history):
             messages.append({"role": "assistant", "content": "错误：URL不能为空"})
             history[-1][1] = "错误：URL不能为空"
             write_debug_info(messages, history)
-            return history
+            yield history
+            return
             
         # 调用fetch函数获取总结问题
         question = fetch(url)
@@ -146,7 +167,8 @@ def bot(history):
             messages.append({"role": "assistant", "content": question})
             history[-1][1] = question
             write_debug_info(messages, history)
-            return history
+            yield history
+            return
             
         # 更新messages
         messages[-1]["content"] = question
@@ -163,7 +185,6 @@ def bot(history):
             messages.append({"role": "assistant", "content": response.strip()})
         
         write_debug_info(messages, new_history)
-        return new_history
     
     # 正常的聊天响应以及文件响应
     else:
@@ -182,8 +203,6 @@ def bot(history):
             messages.append({"role": "assistant", "content": response.strip()})
         
         write_debug_info(messages, new_history)
-
-        return new_history
 
 with gr.Blocks() as demo:
     chatbot = gr.Chatbot(
@@ -232,4 +251,4 @@ with gr.Blocks() as demo:
 
 if __name__ == "__main__":
     demo.queue()
-    demo.launch()
+    demo.launch(allowed_paths=["LocalAI"])
