@@ -74,6 +74,16 @@ def bot(history):
     """Call the model to generate a reply and update chat history"""
     global messages, current_file_text
 
+    # 限制消息历史长度，避免超过上下文窗口
+    def trim_messages(messages, max_messages=10):
+        """保留最近的消息，避免上下文过长"""
+        if len(messages) <= max_messages:
+            return messages
+        # 保留系统消息（如果有）和最近的消息
+        system_messages = [msg for msg in messages if msg.get("role") == "system"]
+        recent_messages = messages[-max_messages:]
+        return system_messages + recent_messages
+
     last_message = messages[-1]["content"]
     
     # 检查是否是分类图片请求（格式为"Please classify {filename}"）
@@ -135,9 +145,12 @@ def bot(history):
         combined_content = search(search_content)
         messages[-1]["content"] = combined_content
         
+        # 使用修剪后的消息避免上下文过长
+        trimmed_messages = trim_messages(messages)
+        
         response = ""
         new_history = history
-        for chunk in chat(messages):
+        for chunk in chat(trimmed_messages):
             if chunk and chunk.strip():
                 response += chunk
                 new_history = history[:-1] + [(history[-1][0], response)]
@@ -173,9 +186,12 @@ def bot(history):
         # 更新messages
         messages[-1]["content"] = question
         
+        # 使用修剪后的消息避免上下文过长
+        trimmed_messages = trim_messages(messages)
+        
         response = ""
         new_history = history
-        for chunk in chat(messages):
+        for chunk in chat(trimmed_messages):
             if chunk and chunk.strip():
                 response += chunk
                 new_history = history[:-1] + [(history[-1][0], response)]
@@ -188,10 +204,13 @@ def bot(history):
     
     # 正常的聊天响应以及文件响应
     else:
+        # 使用修剪后的消息避免上下文过长
+        trimmed_messages = trim_messages(messages)
+        
         response = ""
         new_history = history
         # Stream update history, create a new copy to avoid state issues
-        for chunk in chat(messages):
+        for chunk in chat(trimmed_messages):
             # Only add new reply content, avoid repeating previous dialogue
             if chunk and chunk.strip():
                 response += chunk
