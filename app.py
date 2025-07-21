@@ -149,8 +149,8 @@ def bot(history):
         write_debug_info(messages, new_history)
     
     # 检查是否是网页总结指令
-    elif last_message.startswith("/fetch url "):
-        url = last_message[10:].strip()
+    elif last_message.startswith("/fetch "):
+        url = last_message[7:].strip()
         
         if not url:
             messages.append({"role": "assistant", "content": "错误：URL不能为空"})
