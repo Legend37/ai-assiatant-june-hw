@@ -1,13 +1,14 @@
 import gradio as gr
 import os
 from chat import chat  
-from pdf import read_file_content, generate_answer
+from pdf import read_file_content
 from image_generate import image_generate
 from mnist import image_classification  # 导入图片分类函数
 from search import search
 from fetch import fetch 
 messages = [] 
-current_file_text = None  
+current_file_text = None
+current_file_type = None
 
 def write_debug_info(messages, history):
     """Write the current messages and history to answer/answer.txt for debugging purposes"""
@@ -50,29 +51,48 @@ def add_text(history, text):
     return history, gr.update(value="", interactive=False)  # Clear textbox and disable interaction
 
 def add_file(history, file):
-    """Process uploaded file, extract content and update display"""
-    global messages, current_file_text
-    file_path = file.name
+    global messages, current_file_text, current_file_type
     
-    # 检查文件是否为PNG图片
-    if file_path.lower().endswith('.png'):
-
+    try:
+        file_path = file.name
         filename = os.path.basename(file_path)
-        messages.append({"role": "user", "content": f"Please classify {filename}"})
-        history = history + [((file.name,), None)]
-        return history
-    else:
-        # 非PNG文件
+        file_ext = os.path.splitext(filename)[1].lower()
+        current_file_type = file_ext
+
+        # 处理PNG图片
+        if file_ext == '.png':
+            messages.append({"role": "user", "content": f"Please classify {filename}"})
+            history = history + [((file.name,), None)]
+            return history
+        
+        # 处理文本/PDF文件
         current_file_text = read_file_content(file_path)
         if current_file_text:
-            prompt = f"I uploaded a document, the content is as follows: {current_file_text}"
-            messages.append({"role": "user", "content": prompt})
+            # 添加文件信息到消息记录
+            file_info = f"Uploaded file: {filename} ({file_ext} format)"
+            messages.append({"role": "user", "content": file_info})
             history = history + [((file.name,), None)]
-        return history
-
+            
+            # 如果是TXT文件，自动触发总结
+            if file_ext == '.txt':
+                summary_request = "Please summarize the uploaded document"
+                messages.append({"role": "user", "content": summary_request})
+                history = history + [(summary_request, None)]
+        else:
+            # 文件内容读取失败
+            error_msg = f"无法读取文件内容: {filename}"
+            messages.append({"role": "user", "content": error_msg})
+            history = history + [(error_msg, None)]
+    
+    except Exception as e:
+        error_msg = f"文件处理错误: {str(e)}"
+        messages.append({"role": "user", "content": error_msg})
+        history = history + [(error_msg, None)]
+    
+    return history
 def bot(history):
     """Call the model to generate a reply and update chat history"""
-    global messages, current_file_text
+    global messages, current_file_text, current_file_type
 
     # 限制消息历史长度，避免超过上下文窗口
     def trim_messages(messages, max_messages=10):
@@ -152,6 +172,68 @@ def bot(history):
         new_history = history
         for chunk in chat(trimmed_messages):
             if chunk and chunk.strip():
+                response += chunk
+                new_history = history[:-1] + [(history[-1][0], response)]
+                yield new_history
+        
+        if response.strip():
+            messages.append({"role": "assistant", "content": response.strip()})
+        
+        write_debug_info(messages, new_history)
+    elif current_file_text and current_file_type == '.txt' and last_message == "Please summarize the uploaded document":
+        try:
+            from pdf import generate_summary, generate_text
+            
+            summary_prompt = generate_summary(current_file_text)
+            print(f"总结提示: {summary_prompt[:100]}...")  # 调试输出
+            
+            response = ""
+            new_history = history
+            for chunk in generate_text(summary_prompt):
+                if chunk:
+                    response += chunk
+                    new_history = history[:-1] + [(history[-1][0], response)]
+                    yield new_history
+            
+            if response.strip():
+                messages.append({"role": "assistant", "content": response.strip()})
+            else:
+                error_msg = "未能生成总结内容xx"
+                messages.append({"role": "assistant", "content": error_msg})
+                new_history = history[:-1] + [(history[-1][0], error_msg)]
+                yield new_history
+            
+            write_debug_info(messages, new_history)
+        
+        except Exception as e:
+            error_msg = f"总结生成错误: {str(e)}"
+            messages.append({"role": "assistant", "content": error_msg})
+            history[-1][1] = error_msg
+            write_debug_info(messages, history)
+            yield history
+    
+    # 处理/file指令
+    elif last_message.startswith("/file "):
+        content = last_message[6:].strip()
+        from pdf import generate_question, generate_text
+        
+        if not current_file_text:
+            response = "错误：请先上传文件"
+            messages.append({"role": "assistant", "content": response})
+            history[-1][1] = response
+            write_debug_info(messages, history)
+            yield history
+            return
+        
+        # 生成问题提示
+        question = generate_question(current_file_text, content)
+        messages[-1]["content"] = question
+        
+        # 流式生成回答
+        response = ""
+        new_history = history
+        for chunk in generate_text(question):
+            if chunk:
                 response += chunk
                 new_history = history[:-1] + [(history[-1][0], response)]
                 yield new_history
