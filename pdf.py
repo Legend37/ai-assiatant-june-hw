@@ -4,8 +4,10 @@ import openai  # 确保导入openai
 
 # 创建与chat.py相同的客户端配置
 client = openai.OpenAI(
-    base_url="http://localhost:8080/v1",
-    api_key="dummy_key"
+    # base_url="http://localhost:8080/v1",
+    # api_key="dummy_key"
+    base_url="https://api.deepseek.com/v1",
+    api_key="sk-38eff65a45bd4c4ba49371db2ecaee88"
 )
 
 def read_file_content(file_path):
@@ -27,7 +29,8 @@ def generate_text(prompt):
     try:
         # 使用与chat.py相同的配置
         response = client.chat.completions.create(
-            model="gpt-3.5-turbo",  # 使用聊天模型
+            # model="gpt-3.5-turbo",  # 使用聊天模型
+            model="deepseek-chat",  # 使用DeepSeek聊天模型
             messages=[
                 {"role": "user", "content": prompt}
             ],

@@ -160,26 +160,57 @@ def bot(history):
     
     # 检查是否是网络搜索指令
     elif last_message.startswith("/search "):
-        search_content = last_message[8:]
+        search_content = last_message[8:].strip()
         
-        combined_content = search(search_content)
-        messages[-1]["content"] = combined_content
+        if not search_content:
+            error_msg = "搜索内容不能为空。请使用格式：/search 您要搜索的内容"
+            messages.append({"role": "assistant", "content": error_msg})
+            history[-1][1] = error_msg
+            write_debug_info(messages, history)
+            yield history
+            return
         
-        # 使用修剪后的消息避免上下文过长
-        trimmed_messages = trim_messages(messages)
+        print(f"DEBUG - 处理搜索请求: {search_content}")
         
-        response = ""
-        new_history = history
-        for chunk in chat(trimmed_messages):
-            if chunk and chunk.strip():
-                response += chunk
-                new_history = history[:-1] + [(history[-1][0], response)]
+        # 先显示搜索进度
+        searching_msg = f"正在搜索 '{search_content}'，请稍候..."
+        history[-1][1] = searching_msg
+        yield history
+        
+        try:
+            combined_content = search(search_content)
+            print(f"DEBUG - 搜索结果: {combined_content[:200]}...")
+            
+            # 不再判定搜索是否成功，直接处理所有返回内容
+            # 更新消息内容
+            messages[-1]["content"] = combined_content
+            
+            # 直接使用完整消息，不进行修剪
+            response = ""
+            new_history = history
+            for chunk in chat(messages):
+                if chunk and chunk.strip():
+                    response += chunk
+                    new_history = history[:-1] + [(history[-1][0], response)]
+                    yield new_history
+            
+            if response.strip():
+                messages.append({"role": "assistant", "content": response.strip()})
+            else:
+                # 如果AI模型没有生成回答，就直接显示搜索结果
+                messages.append({"role": "assistant", "content": combined_content})
+                new_history = history[:-1] + [(history[-1][0], combined_content)]
                 yield new_history
-        
-        if response.strip():
-            messages.append({"role": "assistant", "content": response.strip()})
-        
-        write_debug_info(messages, new_history)
+            
+            write_debug_info(messages, new_history)
+            
+        except Exception as e:
+            error_msg = f"搜索过程中发生错误: {str(e)}"
+            print(f"DEBUG - 搜索异常: {error_msg}")
+            messages.append({"role": "assistant", "content": error_msg})
+            history[-1][1] = error_msg
+            write_debug_info(messages, history)
+            yield history
     elif current_file_text and current_file_type == '.txt' and last_message == "Please summarize the uploaded document":
         try:
             from pdf import generate_summary, generate_text
