@@ -48,7 +48,7 @@ def generate_text(prompt):
 def generate_summary(current_file_text):
     """生成文件摘要的提示"""
     return (
-        f"Please generate a concise summary for the following document:\n\n"
+        f"Please generate a concise summary for the following document(回答语言取决于文件的主体语言):\n\n"
         f"{current_file_text}"
     )
 
